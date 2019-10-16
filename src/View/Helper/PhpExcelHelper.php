@@ -3,6 +3,7 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Writer\IWriter;
 
 App::uses('AppHelper', 'View/Helper');
 
@@ -279,7 +280,6 @@ class PhpExcelHelper extends AppHelper {
         foreach ($this->_tableParams['wrap'] as $col)
             $this->_xls->getActiveSheet()->getStyle(Coordinate::stringFromColumnIndex($col) . ($this->_tableParams['header_row'] + 1) . ':' . Coordinate::stringFromColumnIndex($col) . ($this->_tableParams['header_row'] + $this->_tableParams['row_count']))->getAlignment()->setWrapText(true);
 
-        //jwallaced added email links and formatting
         foreach ($this->_tableParams['email'] as $col) {
             $lastRow = $this->_xls->getActiveSheet()->getHighestRow();
             for ($row = 2; $row <= $lastRow; $row++) {
@@ -340,22 +340,22 @@ class PhpExcelHelper extends AppHelper {
     /**
      * Get writer
      *
-     * @return \PhpOffice\PhpSpreadsheet\Writer\IWriter
-     * @throws \PhpOffice\PhpSpreadsheet\Writer\Exception
+     * @param $writer
+     * @return IWriter
      */
-    public function getWriter() {
-        return IOFactory::createWriter($this->_xls, 'Xlsx');
+    public function getWriter($writer) {
+        return IOFactory::createWriter($this->_xls, $writer);
     }
 
     /**
      * Save to a file
      *
      * @param string $file path to file
+     * @param string $writer
      * @return bool
-     * @throws \PhpOffice\PhpSpreadsheet\Writer\Exception
      */
-    public function save($file) {
-        $objWriter = $this->getWriter();
+    public function save($file, $writer = 'Xlsx') {
+        $objWriter = $this->getWriter($writer);
         return $objWriter->save($file);
     }
 
@@ -363,20 +363,20 @@ class PhpExcelHelper extends AppHelper {
      * Output file to browser
      *
      * @param string $filename
+     * @param string $writer
      * @return void on this call
-     * @throws \PhpOffice\PhpSpreadsheet\Writer\Exception
      */
-    public function output($filename = 'export.xlsx') {
+    public function output($filename = 'export.xlsx', $writer = 'Xlsx') {
         // remove all output
         ob_end_clean();
 
         // headers
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        header('Content-Disposition: attachment;filename="' . $filename . '.xlsx"');
+        header('Content-Disposition: attachment;filename="' . $filename . '"');
         header('Cache-Control: max-age=0');
 
         // writer
-        $objWriter = $this->getWriter();
+        $objWriter = $this->getWriter($writer);
         $objWriter->save('php://output');
 
         exit;
