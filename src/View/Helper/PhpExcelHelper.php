@@ -1,4 +1,9 @@
 <?php
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+
 App::uses('AppHelper', 'View/Helper');
 
 /**
@@ -42,10 +47,7 @@ class PhpExcelHelper extends AppHelper {
      * @return $this for method chaining
      */
     public function createWorksheet() {
-        // load vendor classes
-        App::import('Vendor', 'PhpExcel.PHPExcel');
-
-        $this->_xls = new PHPExcel();
+        $this->_xls = new Spreadsheet();
         $this->_row = 1;
 
         return $this;
@@ -58,9 +60,6 @@ class PhpExcelHelper extends AppHelper {
      * @return $this for method chaining
      */
     public function loadWorksheet($file) {
-        // load vendor classes
-        App::import('Vendor', 'PhpExcel.PHPExcel');
-
         $this->_xls = PHPExcel_IOFactory::load($file);
         $this->setActiveSheet(0);
         $this->_row = 1;
@@ -129,8 +128,8 @@ class PhpExcelHelper extends AppHelper {
      * @return $this for method chaining
      */
     public function setDefaultFont($name, $size) {
-        $this->_xls->getDefaultStyle()->getFont()->setName($name);
-        $this->_xls->getDefaultStyle()->getFont()->setSize($size);
+        $this->_xls->getParent()->getDefaultStyle()->getFont()->setName($name);
+        $this->_xls->getParent()->getDefaultStyle()->getFont()->setSize($size);
 
         return $this;
     }
@@ -165,9 +164,9 @@ class PhpExcelHelper extends AppHelper {
      */
     public function addTableHeader($data, $params = array()) {
         // offset
-        $offset = 0;
+        $offset = 1;
         if (isset($params['offset']))
-            $offset = is_numeric($params['offset']) ? (int)$params['offset'] : PHPExcel_Cell::columnIndexFromString($params['offset']);
+            $offset = is_numeric($params['offset']) ? (int)$params['offset'] : Coordinate::columnIndexFromString($params['offset']);
 
         // font name
         if (isset($params['font']))
@@ -185,6 +184,25 @@ class PhpExcelHelper extends AppHelper {
         if (isset($params['italic']))
             $this->_xls->getActiveSheet()->getStyle($this->_row)->getFont()->setItalic($params['italic']);
 
+        if (isset($params['color']))
+            $this->_xls->getActiveSheet()->getStyle($this->_row)->getFont()->applyFromArray(array(
+                'color' => array(
+                    'rgb' => $params['color'])
+            ));
+
+        if (isset($params['fill']))
+            $this->_xls->getActiveSheet()->getStyle($this->_row)->applyFromArray(array(
+                'fill' => array(
+                    'fillType' => Fill::FILL_SOLID,
+                    'color' => array('rgb' => $params['fill']))
+            ));
+
+        if (isset($params['formatting'])) {
+            foreach ($params['formatting'] as $col => $value) {
+                $this->_xls->getActiveSheet()->getStyle($col)->getNumberFormat()->setFormatCode($value);
+            }
+        }
+
         // set internal params that need to be processed after data are inserted
         $this->_tableParams = array(
             'header_row' => $this->_row,
@@ -192,7 +210,8 @@ class PhpExcelHelper extends AppHelper {
             'row_count' => 0,
             'auto_width' => array(),
             'filter' => array(),
-            'wrap' => array()
+            'wrap' => array(),
+            'email' => array()
         );
 
         foreach ($data as $d) {
@@ -212,6 +231,10 @@ class PhpExcelHelper extends AppHelper {
             // wrap
             if (isset($d['wrap']) && $d['wrap'])
                 $this->_tableParams['wrap'][] = $offset;
+
+            // email
+            if (isset($d['email']) && $d['email'])
+                $this->_tableParams['email'][] = $offset;
 
             $offset++;
         }
@@ -250,11 +273,27 @@ class PhpExcelHelper extends AppHelper {
 
         // filter (has to be set for whole range)
         if (count($this->_tableParams['filter']))
-            $this->_xls->getActiveSheet()->setAutoFilter(PHPExcel_Cell::stringFromColumnIndex($this->_tableParams['filter'][0]) . ($this->_tableParams['header_row']) . ':' . PHPExcel_Cell::stringFromColumnIndex($this->_tableParams['filter'][count($this->_tableParams['filter']) - 1]) . ($this->_tableParams['header_row'] + $this->_tableParams['row_count']));
+            $this->_xls->getActiveSheet()->setAutoFilter(Coordinate::stringFromColumnIndex($this->_tableParams['filter'][0]) . ($this->_tableParams['header_row']) . ':' . Coordinate::stringFromColumnIndex($this->_tableParams['filter'][count($this->_tableParams['filter']) - 1]) . ($this->_tableParams['header_row'] + $this->_tableParams['row_count']));
 
         // wrap
         foreach ($this->_tableParams['wrap'] as $col)
-            $this->_xls->getActiveSheet()->getStyle(PHPExcel_Cell::stringFromColumnIndex($col) . ($this->_tableParams['header_row'] + 1) . ':' . PHPExcel_Cell::stringFromColumnIndex($col) . ($this->_tableParams['header_row'] + $this->_tableParams['row_count']))->getAlignment()->setWrapText(true);
+            $this->_xls->getActiveSheet()->getStyle(Coordinate::stringFromColumnIndex($col) . ($this->_tableParams['header_row'] + 1) . ':' . Coordinate::stringFromColumnIndex($col) . ($this->_tableParams['header_row'] + $this->_tableParams['row_count']))->getAlignment()->setWrapText(true);
+
+        //jwallaced added email links and formatting
+        foreach ($this->_tableParams['email'] as $col) {
+            $lastRow = $this->_xls->getActiveSheet()->getHighestRow();
+            for ($row = 2; $row <= $lastRow; $row++) {
+                $cell = $this->_xls->getActiveSheet()->getCell(Coordinate::stringFromColumnIndex($col) . $row);
+                //add formatting
+                $this->_xls->getActiveSheet()->getStyle(Coordinate::stringFromColumnIndex($col) . $row)->applyFromArray(array(
+                    'font'  => array(
+                        'color' => array('rgb' => '0000FF'),
+                        'underline' => true)
+                ));
+                //add hyperlinks
+                $cell->getHyperlink($cell->getValue())->setUrl('mailto:'. $cell->getValue() );
+            }
+        }
 
         return $this;
     }
@@ -265,10 +304,10 @@ class PhpExcelHelper extends AppHelper {
      * @param array $data
      * @return $this for method chaining
      */
-    public function addData($data, $offset = 0) {
+    public function addData($data, $offset = 1) {
         // solve textual representation
         if (!is_numeric($offset))
-            $offset = PHPExcel_Cell::columnIndexFromString($offset);
+            $offset = Coordinate::columnIndexFromString($offset);
 
         foreach ($data as $d)
             $this->_xls->getActiveSheet()->setCellValueByColumnAndRow($offset++, $this->_row, $d);
@@ -301,43 +340,43 @@ class PhpExcelHelper extends AppHelper {
     /**
      * Get writer
      *
-     * @param $writer
-     * @return PHPExcel_Writer_Iwriter
+     * @return \PhpOffice\PhpSpreadsheet\Writer\IWriter
+     * @throws \PhpOffice\PhpSpreadsheet\Writer\Exception
      */
-    public function getWriter($writer) {
-        return PHPExcel_IOFactory::createWriter($this->_xls, $writer);
+    public function getWriter() {
+        return IOFactory::createWriter($this->_xls, 'Xlsx');
     }
 
     /**
      * Save to a file
      *
      * @param string $file path to file
-     * @param string $writer
      * @return bool
+     * @throws \PhpOffice\PhpSpreadsheet\Writer\Exception
      */
-    public function save($file, $writer = 'Excel2007') {
-        $objWriter = $this->getWriter($writer);
+    public function save($file) {
+        $objWriter = $this->getWriter();
         return $objWriter->save($file);
     }
 
     /**
      * Output file to browser
      *
-     * @param string $file path to file
-     * @param string $writer
-     * @return exit on this call
+     * @param string $filename
+     * @return void on this call
+     * @throws \PhpOffice\PhpSpreadsheet\Writer\Exception
      */
-    public function output($filename = 'export.xlsx', $writer = 'Excel2007') {
+    public function output($filename = 'export.xlsx') {
         // remove all output
         ob_end_clean();
 
         // headers
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        header('Content-Disposition: attachment;filename="' . $filename . '"');
+        header('Content-Disposition: attachment;filename="' . $filename . '.xlsx"');
         header('Cache-Control: max-age=0');
 
         // writer
-        $objWriter = $this->getWriter($writer);
+        $objWriter = $this->getWriter();
         $objWriter->save('php://output');
 
         exit;
