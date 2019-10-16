@@ -1,0 +1,18 @@
+{
+    "name": "walliby/cakephp-excel",
+    "description": "PhpExcel helper and component for CakePHP 2.x",
+    "authors": [
+        {
+            "name": "jwallace",
+            "email": "jwallace@amherst.edu"
+        }
+    ],
+    "require": {
+        "phpoffice/phpspreadsheet": "^1.9"
+    },
+    "autoload": {
+        "psr-4": {
+            "Walliby\\PhpExcel\\": "src"
+        }
+    }
+}
